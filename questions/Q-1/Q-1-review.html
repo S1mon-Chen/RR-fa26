@@ -1,0 +1,1090 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>一台 Nginx 引发的五个问题 · 讲评</title>
+<meta name="description" content="互联网产品开发与运维 · 思考题 1 讲评：逐题给出参考要点、关键计算和预期的常见误区。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#F4F6F8; --surface:#FFFFFF; --surface-2:#EDF1F5;
+  --ink:#1B2530; --ink-2:#4A5866; --muted:#6B7885; --rule:#D8DEE5; --rule-strong:#B9C3CE;
+  --accent:#2251C9; --accent-ink:#1B41A3; --accent-soft:#E8EEFB;
+  --amber:#B8681A; --amber-soft:#FBF1E4;
+  --red:#C23B32; --red-soft:#FBE9E7;
+  --green:#2E8B57;
+  --serif:"Noto Serif SC","Songti SC","STSong","SimSun",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC","Segoe UI",Helvetica,Arial,sans-serif;
+  --mono:"JetBrains Mono","SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1319; --surface:#151B23; --surface-2:#1B222C;
+    --ink:#E7ECF1; --ink-2:#B4BFCA; --muted:#8C98A4; --rule:#2B3541; --rule-strong:#3D4956;
+    --accent:#7FA3FF; --accent-ink:#A9C1FF; --accent-soft:#1B2740;
+    --amber:#E5A35A; --amber-soft:#2E2416;
+    --red:#F07A70; --red-soft:#3A1F1D;
+    --green:#5CC28A;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1319; --surface:#151B23; --surface-2:#1B222C;
+  --ink:#E7ECF1; --ink-2:#B4BFCA; --muted:#8C98A4; --rule:#2B3541; --rule-strong:#3D4956;
+  --accent:#7FA3FF; --accent-ink:#A9C1FF; --accent-soft:#1B2740;
+  --amber:#E5A35A; --amber-soft:#2E2416;
+  --red:#F07A70; --red-soft:#3A1F1D;
+  --green:#5CC28A;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--sans); font-size:16px; line-height:1.75;
+  padding-inline:16px; padding-block:0 64px;
+}
+a{color:var(--accent-ink); text-decoration-color:var(--rule-strong); text-underline-offset:3px}
+a:hover{text-decoration-color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+h1,h2,h3{font-family:var(--serif); font-weight:700; line-height:1.3; text-wrap:balance; margin:0}
+p{margin:0}
+strong{font-weight:600}
+code,.mono{font-family:var(--mono); font-size:.92em}
+.num{font-family:var(--mono); font-variant-numeric:tabular-nums}
+.sprite{position:absolute; width:0; height:0; overflow:hidden}
+
+.page{max-width:760px; margin:0 auto}
+
+/* ---------- header ---------- */
+.masthead{padding-block:40px 28px; border-bottom:1px solid var(--rule); display:grid; gap:20px}
+.eyebrow{display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; color:var(--muted); font-size:13px; letter-spacing:.04em}
+.eyebrow .tag{font-family:var(--mono); font-size:12px; padding:2px 8px; border:1px solid var(--rule-strong); border-radius:3px; color:var(--ink-2)}
+.masthead h1{font-size:clamp(30px,6vw,44px); letter-spacing:.01em}
+.masthead .sub{color:var(--ink-2); font-size:17px; max-width:36em}
+.meta{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1px; background:var(--rule); border:1px solid var(--rule); margin:0}
+.meta div{background:var(--surface); padding:10px 14px}
+.meta dt{font-size:12px; color:var(--muted); letter-spacing:.06em}
+.meta dd{margin:2px 0 0; font-size:15px; font-weight:500}
+.meta dd .num{font-size:14px}
+
+.toc{display:flex; flex-wrap:wrap; gap:6px 4px; padding-block:14px; border-bottom:1px solid var(--rule); font-size:14px}
+.toc a{text-decoration:none; color:var(--ink-2); padding:3px 10px; border-radius:999px}
+.toc a:hover{background:var(--surface-2); color:var(--ink)}
+.toc a.q{color:var(--accent-ink)}
+
+/* ---------- prose ---------- */
+.prose{display:grid; gap:14px; max-width:42em}
+.prose ul{margin:0; padding-left:1.3em; display:grid; gap:6px}
+.lead{font-size:17px; color:var(--ink-2)}
+
+section.block{padding-block:40px; border-bottom:1px solid var(--rule); display:grid; gap:22px}
+section.block > h2{font-size:22px}
+.h-row{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap}
+.h-row .kicker{font-family:var(--mono); font-size:12px; color:var(--muted); letter-spacing:.08em}
+
+/* ---------- acts ---------- */
+.act{padding-block:44px; border-bottom:1px solid var(--rule); display:grid; grid-template-columns:72px 1fr; column-gap:20px}
+.act-body{display:grid; gap:22px; min-width:0}
+.act .numeral{font-family:var(--serif); font-weight:700; font-size:60px; line-height:1; color:var(--rule-strong); position:sticky; top:16px; align-self:start; padding-top:2px; font-variant-numeric:lining-nums}
+.act header{display:grid; gap:6px}
+.act header .kicker{font-family:var(--mono); font-size:12px; color:var(--muted); letter-spacing:.08em}
+.act header h2{font-size:26px}
+.act header .leads{font-size:14px; color:var(--muted)}
+.act header .leads b{color:var(--accent-ink); font-weight:500}
+@media (max-width:640px){
+  .act{grid-template-columns:1fr; row-gap:10px}
+  .act .numeral{position:static; font-size:40px; padding:0}
+}
+
+/* ---------- data tables ---------- */
+.tablewrap{overflow-x:auto; border:1px solid var(--rule); background:var(--surface)}
+table{border-collapse:collapse; width:100%; font-size:14.5px; min-width:420px}
+caption{text-align:left; padding:10px 14px 8px; font-size:13px; color:var(--muted); caption-side:top; border-bottom:1px solid var(--rule)}
+th,td{padding:9px 14px; border-bottom:1px solid var(--rule); text-align:left; vertical-align:top}
+th{font-weight:500; color:var(--muted); font-size:13px; letter-spacing:.03em; background:var(--surface-2)}
+td:first-child,th:first-child{white-space:nowrap}
+td.n,th.n{text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+td.bad{color:var(--red)}
+td.warn{color:var(--amber)}
+.sub-note{color:var(--muted); font-size:13px; font-family:var(--sans)}
+
+/* ---------- figures ---------- */
+figure{margin:0; display:grid; gap:10px}
+figure .fig{overflow-x:auto; background:var(--surface); border:1px solid var(--rule); padding:14px 12px}
+figure svg{display:block; width:100%; height:auto; max-width:100%; font-family:var(--sans); color:var(--ink)}
+figcaption{font-size:13.5px; color:var(--muted); line-height:1.6}
+figcaption b{color:var(--ink-2); font-weight:500}
+
+/* icon sprite styling — per-instance colors via custom properties on <use> */
+.ic-fill{fill:var(--ic-fill,var(--surface-2)); stroke:var(--ic-line,var(--ink-2)); stroke-width:1.4; stroke-linejoin:round}
+.ic-slot{fill:var(--ic-slot,var(--surface)); stroke:var(--ic-line,var(--ink-2)); stroke-width:1}
+.ic-screen{fill:var(--ic-screen,var(--surface)); stroke:var(--ic-line,var(--ink-2)); stroke-width:1}
+.ic-stroke{fill:none; stroke:var(--ic-line,var(--ink-2)); stroke-width:1.4; stroke-linecap:round; stroke-linejoin:round}
+.ic-stroke-b{fill:none; stroke:var(--ic-line,var(--ink-2)); stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round}
+.ic-dot{fill:var(--ic-line,var(--ink-2))}
+.ic-led{fill:var(--ic-led,var(--green))}
+.ic-led2{fill:var(--ic-line,var(--rule-strong)); opacity:.6}
+.u-acc{--ic-fill:var(--accent-soft); --ic-line:var(--accent)}
+.u-amber{--ic-fill:var(--amber-soft); --ic-line:var(--amber)}
+.u-red{--ic-fill:var(--red-soft); --ic-line:var(--red); --ic-led:var(--red)}
+.u-ghost{--ic-fill:var(--surface); --ic-line:var(--rule-strong); --ic-led:var(--rule-strong)}
+.u-ink{--ic-fill:var(--surface); --ic-line:var(--ink)}
+.u-muted{--ic-fill:var(--surface-2); --ic-line:var(--muted)}
+
+/* svg drawing classes */
+.box{fill:var(--surface); stroke:var(--ink-2); stroke-width:1.2}
+.box-bad{fill:var(--red-soft); stroke:var(--red); stroke-width:1.2}
+.chip{fill:var(--surface); stroke:var(--rule-strong); stroke-width:1}
+.ln{fill:none; stroke:var(--ink-2); stroke-width:1.2}
+.ln-thin{fill:none; stroke:var(--rule-strong); stroke-width:1}
+.ln-acc{fill:none; stroke:var(--accent); stroke-width:1.6}
+.ln-acc-b{fill:none; stroke:var(--accent); stroke-width:3}
+.ln-amber{fill:none; stroke:var(--amber); stroke-width:1.4}
+.ln-red{fill:none; stroke:var(--red); stroke-width:1.6}
+.dash{stroke-dasharray:5 4}
+.dots{stroke-dasharray:2 3}
+.grid{stroke:var(--rule); stroke-width:1}
+.axis{stroke:var(--rule-strong); stroke-width:1}
+.lbl{fill:var(--ink); font-size:12.5px}
+.lbl-s{fill:var(--ink-2); font-size:11px}
+.lbl-m{fill:var(--muted); font-size:11px}
+.lbl-acc{fill:var(--accent-ink); font-size:12px}
+.lbl-amber{fill:var(--amber); font-size:11.5px}
+.lbl-red{fill:var(--red); font-size:11.5px}
+.lbl-b{font-weight:600}
+.lbl-mono{font-family:var(--mono); font-size:11px}
+.mk-ink{fill:var(--ink-2)}
+.mk-acc{fill:var(--accent)}
+.mk-amber{fill:var(--amber)}
+.mk-red{fill:var(--red)}
+.pt{fill:var(--accent); stroke:var(--surface); stroke-width:1.5}
+.pt-2{fill:var(--surface); stroke:var(--accent); stroke-width:1.8}
+.pt-3{fill:var(--ink-2); stroke:var(--surface); stroke-width:1.5}
+.badge{fill:var(--amber)}
+.badge-t{fill:#fff; font-size:11px; font-weight:700}
+.evt-red{fill:var(--red)}
+.ground{stroke:var(--rule-strong); stroke-width:1.5; stroke-dasharray:1 5; stroke-linecap:round}
+
+/* ---------- director quote ---------- */
+.quote{display:grid; grid-template-columns:auto 1fr; gap:14px; padding:18px 20px; background:var(--surface); border:1px solid var(--rule); margin:0}
+.quote .who{display:grid; gap:6px; justify-items:center; align-content:start; padding-right:14px; border-right:1px solid var(--rule)}
+.quote .who svg{width:34px; height:42px; display:block}
+.quote .who span{font-family:var(--mono); font-size:10.5px; color:var(--muted); letter-spacing:.04em; white-space:nowrap}
+.quote p{font-family:var(--serif); font-size:17.5px; line-height:1.8; color:var(--ink)}
+.quote p + p{margin-top:8px}
+
+/* ---------- observations ---------- */
+.obs{display:grid; gap:8px; padding:0; margin:0; list-style:none}
+.obs li{display:grid; grid-template-columns:26px 1fr; gap:10px; align-items:start; font-size:15px}
+.obs .n{width:22px; height:22px; border-radius:50%; background:var(--amber); color:#fff; font-family:var(--mono); font-size:12px; font-weight:700; display:grid; place-items:center; margin-top:3px}
+
+/* ---------- question card ---------- */
+.question{position:relative; background:var(--accent-soft); border:1px solid var(--accent); padding:26px 22px 22px; display:grid; gap:12px; margin-top:8px}
+.question .pill{position:absolute; top:-13px; left:16px; background:var(--accent); color:#fff; font-family:var(--mono); font-size:12px; letter-spacing:.06em; padding:3px 10px}
+.question h3{font-size:19px; color:var(--ink)}
+.question p, .question li{font-size:15.5px; line-height:1.75}
+.question ol{margin:0; padding-left:1.4em; display:grid; gap:6px}
+.question .adv{font-size:14px; color:var(--ink-2); border-top:1px dashed var(--rule-strong); padding-top:10px}
+.question .adv b{color:var(--muted); font-weight:500; font-family:var(--mono); font-size:12px; letter-spacing:.06em}
+
+/* ---------- rubric ---------- */
+.rubric{display:grid; grid-template-columns:auto 1fr; border:1px solid var(--rule); background:var(--surface)}
+.rubric > div{padding:12px 16px; border-bottom:1px solid var(--rule); font-size:15px}
+.rubric > div:nth-last-child(-n+2){border-bottom:none}
+.rubric .score{font-family:var(--mono); font-size:22px; font-weight:500; color:var(--accent-ink); border-right:1px solid var(--rule); display:grid; place-items:center; min-width:64px}
+.rubric .score.s1{color:var(--amber)} .rubric .score.s0{color:var(--muted)}
+.hard{padding:14px 18px; background:var(--amber-soft); border:1px solid var(--amber); font-size:14.5px}
+.refs{margin:0; padding-left:1.2em; display:grid; gap:8px; font-size:14.5px}
+.refs li{overflow-wrap:anywhere}
+
+footer{padding-block:28px; color:var(--muted); font-size:13px; display:flex; flex-wrap:wrap; gap:8px 20px}
+
+@media (prefers-reduced-motion: no-preference){
+  html{scroll-behavior:smooth}
+}
+
+/* ---------- print ---------- */
+@page{size:A4; margin:16mm 14mm}
+@media print{
+  :root, :root:not([data-theme="light"]), :root[data-theme="dark"]{
+    --ground:#FFFFFF; --surface:#FFFFFF; --surface-2:#F0F2F5;
+    --ink:#111820; --ink-2:#3A4654; --muted:#5C6773; --rule:#C9D0D8; --rule-strong:#9AA4AF;
+    --accent:#1F49B5; --accent-ink:#173A93; --accent-soft:#EDF1FB;
+    --amber:#A85E14; --amber-soft:#FBF3E8;
+    --red:#B4342C; --red-soft:#FBEDEB;
+    --green:#2E8B57;
+    color-scheme:light;
+  }
+  *{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+  html{scroll-behavior:auto}
+  body{padding:0; font-size:12.5pt; line-height:1.6}
+  .page{max-width:none}
+  .toc{display:none}
+  .masthead{padding-block:0 18px}
+  .masthead h1{font-size:26pt}
+  .masthead .sub{font-size:12pt}
+  section.block{padding-block:20px}
+  .act{padding-block:22px; grid-template-columns:48px 1fr; column-gap:14px}
+  .act header, .h-row, .masthead{break-after:avoid}
+  .prose p, .prose li{orphans:3; widows:3}
+  .act .numeral{position:static; font-size:34pt}
+  .act header h2{font-size:18pt}
+  .act-body{gap:14px}
+  figure, .question, .tablewrap, .quote, .rubric, .hard{break-inside:avoid}
+  figure .fig{padding:8px 6px; overflow:visible}
+  figcaption{font-size:9.5pt}
+  table{font-size:10.5pt; min-width:0}
+  th,td{padding:5px 8px}
+  .question{padding:18px 16px 16px}
+  .question p,.question li{font-size:11.5pt}
+  .quote p{font-size:12.5pt}
+  a{color:inherit; text-decoration:none}
+  .refs a[href^="http"]::after{content:" — " attr(href); font-family:var(--mono); font-size:9pt; color:var(--muted)}
+  footer{padding-block:12px; break-before:avoid}
+}
+
+/* ---------- review additions ---------- */
+.note{padding:12px 16px; background:var(--surface); border:1px solid var(--rule); border-left:4px solid var(--rule-strong); font-size:14.5px; color:var(--ink-2)}
+.recall{display:flex; flex-wrap:wrap; gap:6px 12px; align-items:baseline; padding:12px 16px; background:var(--surface); border:1px solid var(--rule); font-size:14.5px; color:var(--ink-2)}
+.recall .pill{font-family:var(--mono); font-size:12px; letter-spacing:.06em; background:var(--accent); color:#fff; padding:2px 9px}
+.verdict{display:grid; gap:6px; padding:16px 20px; background:var(--accent-soft); border:1px solid var(--accent); border-left-width:4px}
+.verdict .k{font-family:var(--mono); font-size:12px; letter-spacing:.08em; color:var(--accent-ink)}
+.verdict p{font-family:var(--serif); font-size:17.5px; line-height:1.8}
+h3.sub{font-size:18px; margin-top:6px}
+.calc{display:grid; gap:2px; padding:12px 16px 14px; background:var(--surface); border:1px solid var(--rule); border-left:4px solid var(--amber)}
+.calc .calc-h{font-family:var(--mono); font-size:12px; letter-spacing:.08em; color:var(--amber); margin-bottom:4px}
+.calc p{font-family:var(--mono); font-size:13.5px; line-height:1.9; overflow-wrap:anywhere}
+.calc p.cm{font-family:var(--sans); font-size:13.5px; color:var(--muted); line-height:1.7}
+.pit{display:grid; gap:6px; padding:14px 18px; background:var(--red-soft); border:1px solid var(--red)}
+.pit .pit-h{font-family:var(--mono); font-size:12px; letter-spacing:.08em; color:var(--red)}
+.pit ul{margin:0; padding-left:1.2em; display:grid; gap:5px; font-size:14.5px}
+.steps{margin:0; padding-left:1.4em; display:grid; gap:6px}
+.bar-acc{fill:var(--accent)}
+.bar-amber{fill:var(--amber)}
+.bar-red{fill:var(--red)}
+.bar-mut{fill:var(--rule-strong)}
+.halo{stroke:var(--surface); stroke-width:4px; paint-order:stroke; stroke-linejoin:round}
+@media print{
+  .verdict,.calc,.pit,.recall,.note{break-inside:avoid}
+  .calc p{font-size:10pt}
+  .verdict p{font-size:12.5pt}
+  .recall,.pit ul,.note{font-size:11pt}
+}
+@media print{
+  .act{break-before:page; border-bottom:none; padding-bottom:0}
+  .act header{break-inside:avoid}
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .recall .pill{color:#0E1319} }
+:root[data-theme="dark"] .recall .pill{color:#0E1319}
+</style>
+</head>
+<body>
+
+<!-- ============ icon sprite ============ -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-server" viewBox="0 0 48 64">
+      <rect x="4" y="2" width="40" height="60" rx="4" class="ic-fill"/>
+      <rect x="10" y="10" width="28" height="8" rx="2" class="ic-slot"/>
+      <rect x="10" y="24" width="28" height="8" rx="2" class="ic-slot"/>
+      <rect x="10" y="38" width="28" height="8" rx="2" class="ic-slot"/>
+      <circle cx="14" cy="55" r="2.4" class="ic-led"/>
+      <circle cx="21" cy="55" r="2.4" class="ic-led2"/>
+    </symbol>
+    <symbol id="i-db" viewBox="0 0 64 64">
+      <path d="M10 14v36c0 5 10 9 22 9s22-4 22-9V14" class="ic-fill"/>
+      <ellipse cx="32" cy="14" rx="22" ry="8" class="ic-fill"/>
+      <path d="M10 26c0 5 10 9 22 9s22-4 22-9M10 38c0 5 10 9 22 9s22-4 22-9" class="ic-stroke"/>
+    </symbol>
+    <symbol id="i-laptop" viewBox="0 0 64 48">
+      <rect x="8" y="3" width="48" height="33" rx="3" class="ic-fill"/>
+      <rect x="12" y="7" width="40" height="25" rx="1.5" class="ic-screen"/>
+      <rect x="14" y="9.5" width="36" height="4" rx="1" class="ic-slot"/>
+      <path d="M2 40h60l-3 5H5z" class="ic-fill"/>
+    </symbol>
+    <symbol id="i-phone" viewBox="0 0 32 56">
+      <rect x="3" y="2" width="26" height="52" rx="5" class="ic-fill"/>
+      <rect x="6" y="8" width="20" height="38" rx="1.5" class="ic-screen"/>
+      <circle cx="16" cy="50" r="2" class="ic-dot"/>
+    </symbol>
+    <symbol id="i-person" viewBox="0 0 32 40">
+      <circle cx="16" cy="9" r="7" class="ic-fill"/>
+      <path d="M3 39c0-10 6-17 13-17s13 7 13 17z" class="ic-fill"/>
+    </symbol>
+    <symbol id="i-crowd" viewBox="0 0 64 44">
+      <use href="#i-person" x="0" y="6" width="26" height="32"/>
+      <use href="#i-person" x="38" y="6" width="26" height="32"/>
+      <use href="#i-person" x="17" y="0" width="30" height="38"/>
+    </symbol>
+    <symbol id="i-lb" viewBox="0 0 64 48">
+      <rect x="2" y="4" width="60" height="40" rx="6" class="ic-fill"/>
+      <path d="M12 24h14M26 24l14-10h12M26 24h26M26 24l14 10h12" class="ic-stroke"/>
+      <circle cx="12" cy="24" r="3" class="ic-dot"/>
+      <circle cx="53" cy="14" r="2.5" class="ic-dot"/><circle cx="53" cy="24" r="2.5" class="ic-dot"/><circle cx="53" cy="34" r="2.5" class="ic-dot"/>
+    </symbol>
+    <symbol id="i-clock" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="20" class="ic-fill"/>
+      <path d="M24 24V10M24 24H12" class="ic-stroke-b"/>
+      <circle cx="24" cy="24" r="2" class="ic-dot"/>
+    </symbol>
+    <symbol id="i-lock" viewBox="0 0 40 48">
+      <path d="M11 20v-7a9 9 0 0 1 18 0v7" class="ic-stroke-b"/>
+      <rect x="5" y="20" width="30" height="24" rx="4" class="ic-fill"/>
+      <circle cx="20" cy="30" r="3" class="ic-dot"/><path d="M20 32v6" class="ic-stroke-b"/>
+    </symbol>
+    <symbol id="i-log" viewBox="0 0 40 48">
+      <path d="M6 4h20l8 8v32H6z" class="ic-fill"/>
+      <path d="M26 4v8h8" class="ic-stroke"/>
+      <path d="M12 21h16M12 28h16M12 35h10" class="ic-stroke"/>
+    </symbol>
+    <symbol id="i-pulse" viewBox="0 0 64 32">
+      <path d="M2 18h12l6-12 8 22 8-16 4 6h22" class="ic-stroke-b"/>
+    </symbol>
+    <symbol id="i-gauge" viewBox="0 0 48 32">
+      <path d="M4 28a20 20 0 0 1 40 0" class="ic-stroke"/>
+      <path d="M24 28L34 12" class="ic-stroke-b"/>
+      <circle cx="24" cy="28" r="3" class="ic-dot"/>
+    </symbol>
+    <symbol id="i-warn" viewBox="0 0 48 44">
+      <path d="M24 3L46 41H2z" class="ic-fill"/>
+      <path d="M24 16v13" class="ic-stroke-b"/><circle cx="24" cy="35" r="2.2" class="ic-dot"/>
+    </symbol>
+    <symbol id="i-spin" viewBox="0 0 32 32">
+      <path d="M16 3A13 13 0 1 1 3 16" class="ic-stroke-b"/>
+    </symbol>
+    <symbol id="i-wrench" viewBox="0 0 40 40">
+      <path d="M27 4a9 9 0 0 0-9 12L5 29a3 3 0 0 0 4 4l13-13a9 9 0 0 0 12-9l-5 5-5-1-1-5z" class="ic-fill"/>
+    </symbol>
+    <symbol id="i-power" viewBox="0 0 32 32">
+      <path d="M10 9a10 10 0 1 0 12 0" class="ic-stroke-b"/><path d="M16 3v12" class="ic-stroke-b"/>
+    </symbol>
+    <symbol id="i-bubble" viewBox="0 0 48 40">
+      <path d="M4 4h40v24H18l-8 8v-8H4z" class="ic-fill"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="page">
+
+<header class="masthead">
+  <div class="eyebrow">
+    <span>互联网产品开发与运维 · 2026 秋</span>
+    <span class="tag">思考题 1 · 讲评</span>
+    <span class="tag">已审定 · 2026-10-08</span>
+  </div>
+  <h1>一台 Nginx 引发的五个问题 · 讲评</h1>
+  <p class="sub">对照 <a href="Q-1.html">Q-1 题面</a>，逐题给出参考要点、关键计算和预期的常见误区。这是参考思路，不是唯一答案：判断准确、用数据支撑、说清成立条件，换一种说法同样成立。</p>
+  <dl class="meta">
+    <div><dt>对应题面</dt><dd>思考题 1 · M1</dd></div>
+    <div><dt>题面截止</dt><dd><span class="num">2026-10-09</span> 周五 <span class="num">23:59</span></dd></div>
+    <div><dt>使用时机</dt><dd>截止之后</dd></div>
+    <div><dt>依据</dt><dd>题面数据 · L-02～L-04</dd></div>
+  </dl>
+</header>
+
+<nav class="toc" aria-label="目录">
+  <a href="#ov">总览</a>
+  <a href="#r1">一 · 方案</a>
+  <a href="#r2">二 · 压测</a>
+  <a href="#r3">三 · 日常</a>
+  <a href="#r4">四 · 故障</a>
+  <a href="#r5">五 · 上限</a>
+  <a href="#rubric" class="q">评分对照</a>
+  <a href="#habits" class="q">方法提醒</a>
+  <a href="#next" class="q">后续衔接</a>
+  <a href="#refs" class="q">参考</a>
+</nav>
+
+<!-- ============ 总览 ============ -->
+<section class="block" id="ov">
+  <div class="h-row"><span class="kicker">OVERVIEW</span><h2>先看整张图</h2></div>
+  <div class="prose">
+    <p class="lead">五个问题其实是同一个问题的五个切面：面对同一套数据，<strong>看清负载均衡买到了什么、付出了什么、边界在哪</strong>。</p>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <caption>五个问题，一句话结论</caption>
+      <thead><tr><th>问题</th><th>结论</th><th>最关键的数字</th></tr></thead>
+      <tbody>
+        <tr><td>1 · 收益与代价</td><td>买到容量、可用性和发布无感；代价是状态（Session、缓存、日志）不再只在一台机器上</td><td>单机约 1333 QPS → 4 台约 4667 QPS；数据库查询 ×4</td></tr>
+        <tr><td>2 · 吞吐 vs 响应时间</td><td>重载下变快是因为排队消失，不是单个请求变快；轻载反而略慢</td><td>单机 ρ = 1.8；轮询时旧机器 ρ = 0.9；最少连接各台 ρ ≈ 0.51</td></tr>
+        <tr><td>3 · 不只是性能</td><td>发布、安全、观测、成本都受益，但要分清「顺带」和「额外建设」；关机有前提</td><td>平时 CPU 3%；关两台后剩 2 台并联仍有 99.99%</td></tr>
+        <tr><td>4 · 复杂但可靠</td><td>故障变多，但每次故障变小、恢复变快；新风险是共因故障</td><td>1 − 0.01⁴ ≈ 99.999999%；要扛住峰值只有 99.94%</td></tr>
+        <tr><td>5 · 有没有上限</td><td>三层上限：入口、串行比例、数据热点；解法分别在入口层、数据层、业务层</td><td>Nginx 2.5 万 QPS；s ≈ 0.25 → 1200 TPS；2000 抢 60</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="note">本讲评在收到作答之前写成，「常见误区」是按题面设计预估的，不是对某份作答的评价。文中「L-xx 第 n 页」指讲义页码；类别名称以 L-02 讲义为准，这里按题面第三幕的措辞列出。</p>
+</section>
+
+<!-- ============ 讲评 1 ============ -->
+<section class="act" id="r1">
+  <div class="numeral" aria-hidden="true">1</div>
+  <div class="act-body">
+  <header>
+    <span class="kicker">REVIEW 1</span>
+    <h2>方案：收益对应需求，代价追到成因</h2>
+    <p class="leads">对应 <b>问题 1 · 收益与代价</b></p>
+  </header>
+
+  <div class="recall"><span class="pill">问题 1</span><span>负载均衡的收益与代价是什么？收益对应 L-02 的非功能性需求类别；代价沿用「瓶颈 → 方案 → 新问题」，至少解释三件事的成因并给出常规解法。</span></div>
+
+  <div class="verdict">
+    <span class="k">一句话结论</span>
+    <p>多花的钱买到三样东西：<strong>容量</strong>（单机约 1333 QPS 变成约 4667 QPS）、<strong>可用性</strong>（单点变冗余）、<strong>发布无感</strong>。换来的是「状态不再唯一」：Session、本地缓存、日志都从一台机器变成四台。</p>
+  </div>
+
+  <h3 class="sub">收益：逐条对应需求类别，并给出度量</h3>
+  <div class="tablewrap">
+    <table>
+      <caption>收益 · 对应非功能性需求</caption>
+      <thead><tr><th>需求类别</th><th>负载均衡带来什么</th><th>题面中的证据</th></tr></thead>
+      <tbody>
+        <tr><td>性能 / 容量</td><td>4 台并行处理，容量约为单机的 3.5 倍</td><td>2400 QPS 下 p95 从 4.8 s 降到 300 ms（第二幕）</td></tr>
+        <tr><td>可用性</td><td>单点变冗余，故障节点被自动摘除</td><td>不可用时长约 90 分钟降到 3 分钟（第四幕）</td></tr>
+        <tr><td>可维护性（发布）</td><td>逐台摘除、更新、挂回，学生无感</td><td>不再提前公告停机 10 分钟（第三幕）</td></tr>
+        <tr><td>可扩展性 / 弹性</td><td>读路径近似线性加机器；平时可以缩</td><td>第三幕、第五幕</td></tr>
+        <tr><td>安全性</td><td>HTTPS、单 IP 限流只在入口配一次</td><td>第三幕</td></tr>
+        <tr><td>可观测性</td><td>统一入口的访问日志可定位慢机器</td><td>第三幕</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="calc">
+    <span class="calc-h">关键计算 · 容量</span>
+    <p>单机上限 ≈ 4 核 ÷ 3 ms ≈ 1333 QPS</p>
+    <p class="cm">压测表里 1200 QPS 已经 p95 1.8 s，1500 QPS 开始大量超时，上限在两者之间；L-06 用 4 核 ÷ 3 ms 算出同一个数。</p>
+    <p>4 台 = 3 × 1333 + 667 ≈ 4667 QPS ≈ 3.5 × 单机</p>
+    <p class="cm">旧机器处理能力约为新机器的一半。</p>
+    <p>2400 QPS 的利用率 ρ = 2400 ÷ 4667 ≈ 0.51（单机是 1.8）</p>
+  </div>
+
+  <h3 class="sub">代价：三件事的成因与常规解法</h3>
+  <div class="tablewrap">
+    <table>
+      <caption>瓶颈 → 方案 → 新问题</caption>
+      <thead><tr><th>现象</th><th>成因</th><th>常规解法</th><th>解法的新问题</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>反复要求重新登录</td>
+          <td>Session 存在单台 Tomcat 的内存里；轮询把同一用户的连续请求分到不同机器，另一台没有这份 Session</td>
+          <td>① Session 集中存储（如 Redis）<br>② 无状态化（令牌随请求携带）<br>③ 粘性会话（按 IP 或 Cookie 固定到一台）</td>
+          <td>集中存储多一个依赖和一次网络往返；粘性会话让负载不均，那台机器挂了仍丢状态</td>
+        </tr>
+        <tr>
+          <td>数据库查询 ×4</td>
+          <td>本地缓存（TTL 5 s）每台各一份；同一课程每 5 秒在每台机器上各回源一次，总回源量 ×4，而学生总数没变</td>
+          <td>分布式缓存（L-04 第二阶段）；按课程 id 哈希使同一课程固定落到同一台；请求合并，只放一个请求回源</td>
+          <td>缓存一致性，以及穿透、击穿、雪崩</td>
+        </tr>
+        <tr>
+          <td>偶发 500 难定位</td>
+          <td>日志按机器分散，请求没有统一标识，无法跨机器串起来</td>
+          <td>先用 Nginx 日志里的 <code>upstream_addr</code> 定位机器；请求 ID 贯穿全链路；集中日志平台</td>
+          <td>日志平台本身要运维、要存储，成本不低</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="prose">
+    <p>此外还有几项，答到更完整：四份配置要保持一致；发布期间新旧版本共存；Nginx 自己成为单点和新瓶颈（第四幕、第五幕）；健康检查配错会造成事故（第四幕）；5 台的成本对 1 台。</p>
+  </div>
+
+  <div class="pit">
+    <span class="pit-h">预期常见误区</span>
+    <ul>
+      <li>只写「性能更好、可靠性更高」，没有度量，也没有对应到需求类别。</li>
+      <li>把 Session 问题归咎于「负载均衡有缺陷」。根因是实例不再唯一、不再长寿，负载均衡只是让它暴露出来（L-05 第 25 页）。</li>
+      <li>把数据库 QPS ×4 当成缓存失效的 bug。它是缓存按机器各自独立的必然结果。</li>
+      <li>代价只列「要维护 Nginx」一条，没有解释三件事的成因。</li>
+    </ul>
+  </div>
+  </div>
+</section>
+
+<!-- ============ 讲评 2 ============ -->
+<section class="act" id="r2">
+  <div class="numeral" aria-hidden="true">2</div>
+  <div class="act-body">
+  <header>
+    <span class="kicker">REVIEW 2</span>
+    <h2>压测：改善的是排队，不是单个请求</h2>
+    <p class="leads">对应 <b>问题 2 · 吞吐 vs 响应时间</b></p>
+  </header>
+
+  <div class="recall"><span class="pill">问题 2</span><span>解释表中三件事：(a) 轻载 4 台为何反而慢 1～5 ms；(b) 重载 p95 为何从 4.8 s 降到几百毫秒；(c) 轮询的 p99 为何是最少连接的 4 倍。最后回答：改善的是平均响应时间还是尾延迟，何时成立。</span></div>
+
+  <div class="verdict">
+    <span class="k">一句话结论</span>
+    <p>重载下变快，是因为<strong>排队消失</strong>，不是每个请求都被加速了；轻载没有队可消，多一跳反而慢 1～5 ms。排队主要伤害尾部，所以改善最先体现在 p95、p99 上。同事那句「响应时间也全面变快」不准确。</p>
+  </div>
+
+  <div class="calc">
+    <span class="calc-h">关键计算 · 利用率与排队倍数</span>
+    <p>新机器上限 1333 QPS，旧机器 667 QPS，合计 4667 QPS</p>
+    <p class="cm">口径假设：题面没有说「单机」基线是新机器还是去年的旧机器。这里按新机器的规格计（题面插图里单机与新机器同色，L-06 也用 4 核 ÷ 3 ms ≈ 1333 QPS 对照这张压测表）。若基线是旧机器，则新机器约 2667 QPS，轮询时旧机器的 ρ 只有 0.45，就解释不了 p99 相差 4 倍，所以按新机器计更符合题面数据。小组若有不同假设，只要自洽、机制讲对即可。</p>
+    <p>单机：ρ = 2400 ÷ 1333 = 1.8（大于 1，队列只会越来越长，直到请求超时）</p>
+    <p>轮询：每台 600 QPS → 新机器 ρ = 0.45，旧机器 ρ = 0.90</p>
+    <p>最少连接：份额按能力分配 ≈ 29 / 29 / 29 / 14%，各台 ρ ≈ 0.51</p>
+    <p>排队倍数 ≈ 1 ÷ (1 − ρ)：0.45 → 1.8 倍；0.90 → 10 倍；0.51 → 2.1 倍</p>
+    <p class="cm">倍数取 L-07 第 6 页的 M/M/1 近似，只作量级估计，不是对 p99 的精确预测。</p>
+  </div>
+
+  <figure>
+    <div class="fig">
+      <svg viewBox="0 0 760 346" role="img" aria-label="利用率对比。单机的利用率是 1.8，远超 1.0；四台轮询时三台新机器是 0.45，旧机器是 0.90；四台最少连接时每台都约 0.51。图中画出 0.7 的容量线和 1.0 的上限线。">
+        <defs>
+          <marker id="rv1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="mk-red"/></marker>
+        </defs>
+        <text x="20" y="18" class="lbl-m lbl-mono">利用率 ρ = 该台收到的 QPS ÷ 该台处理能力</text>
+        <line x1="270" y1="36" x2="270" y2="318" class="grid"/>
+        <line x1="470" y1="36" x2="470" y2="318" class="grid"/>
+        <line x1="570" y1="36" x2="570" y2="318" class="grid"/>
+        <line x1="170" y1="318" x2="590" y2="318" class="axis"/>
+        <line x1="170" y1="36" x2="170" y2="318" class="axis"/>
+        <line x1="310" y1="36" x2="310" y2="318" class="ln-amber dash"/>
+        <text x="306" y="46" text-anchor="end" class="lbl-amber">容量线 0.7</text>
+        <line x1="370" y1="36" x2="370" y2="318" class="ln-red dash"/>
+        <text x="374" y="46" class="lbl-red">ρ = 1 · 处理能力</text>
+        <text x="170" y="334" text-anchor="middle" class="lbl-m lbl-mono">0</text>
+        <text x="270" y="334" text-anchor="middle" class="lbl-m lbl-mono">0.5</text>
+        <text x="370" y="334" text-anchor="middle" class="lbl-m lbl-mono">1.0</text>
+        <text x="470" y="334" text-anchor="middle" class="lbl-m lbl-mono">1.5</text>
+        <text x="570" y="334" text-anchor="middle" class="lbl-m lbl-mono">2.0</text>
+
+        <text x="20" y="62" class="lbl lbl-b halo">单机 · 2400 QPS 全进来</text>
+        <text x="750" y="62" text-anchor="end" class="lbl-m">p50 2.1 s · p95 4.8 s · 错误 9%</text>
+        <text x="160" y="87" text-anchor="end" class="lbl-s">单机</text>
+        <rect x="170" y="75" width="360" height="16" class="bar-red"/>
+        <text x="600" y="87" class="lbl-red lbl-mono">1.80 · 队列无界</text>
+
+        <text x="20" y="116" class="lbl lbl-b halo">4 台 + 轮询 · 每台 600 QPS</text>
+        <text x="750" y="116" text-anchor="end" class="lbl-m">p50 26 ms · p99 1.6 s</text>
+        <text x="160" y="141" text-anchor="end" class="lbl-s">新 1</text>
+        <rect x="170" y="129" width="90" height="16" class="bar-acc"/>
+        <text x="600" y="141" class="lbl-s lbl-mono">0.45 · 1.8×</text>
+        <text x="160" y="163" text-anchor="end" class="lbl-s">新 2</text>
+        <rect x="170" y="151" width="90" height="16" class="bar-acc"/>
+        <text x="600" y="163" class="lbl-s lbl-mono">0.45 · 1.8×</text>
+        <text x="160" y="185" text-anchor="end" class="lbl-s">新 3</text>
+        <rect x="170" y="173" width="90" height="16" class="bar-acc"/>
+        <text x="600" y="185" class="lbl-s lbl-mono">0.45 · 1.8×</text>
+        <text x="160" y="207" text-anchor="end" class="lbl-s">旧（½ 速）</text>
+        <rect x="170" y="195" width="180" height="16" class="bar-amber"/>
+        <text x="600" y="207" class="lbl-amber lbl-mono">0.90 · 10×</text>
+
+        <text x="20" y="236" class="lbl lbl-b halo">4 台 + 最少连接 · 按能力分配，各台 ρ 相同（含旧机器）</text>
+        <text x="750" y="236" text-anchor="end" class="lbl-m">p50 25 ms · p99 400 ms</text>
+        <text x="160" y="261" text-anchor="end" class="lbl-s">新 1</text>
+        <rect x="170" y="249" width="103" height="16" class="bar-acc"/>
+        <text x="600" y="261" class="lbl-s lbl-mono">0.51 · 2.1×</text>
+        <text x="160" y="283" text-anchor="end" class="lbl-s">新 2</text>
+        <rect x="170" y="271" width="103" height="16" class="bar-acc"/>
+        <text x="600" y="283" class="lbl-s lbl-mono">0.51 · 2.1×</text>
+        <text x="160" y="305" text-anchor="end" class="lbl-s">新 3、旧</text>
+        <rect x="170" y="293" width="103" height="16" class="bar-acc"/>
+        <text x="600" y="305" class="lbl-s lbl-mono">0.51 · 2.1×</text>
+      </svg>
+    </div>
+    <figcaption><b>同样 4 台机器，请求怎么分，决定了队排在哪里。</b>每行末尾是 ρ 和排队倍数。单机 ρ 超过 1，队列无界增长；轮询让旧机器 ρ 到 0.90，它接到的那四分之一请求排队 10 倍，p99 就落在这里；最少连接让每台的 ρ 一样，尾巴就收回来了。</figcaption>
+  </figure>
+
+  <h3 class="sub">(a) 轻载为什么慢了 1～5 ms</h3>
+  <div class="prose">
+    <ul>
+      <li><strong>多一跳。</strong>客户端 → Nginx → Tomcat，多一次连接与转发，落在响应时间分解里的「建连 + 传输」段（L-03 第 16～17 页）。</li>
+      <li><strong>缓存被分散。</strong>本地缓存从一份变四份，命中率下降，部分请求回源（第一幕现象 2），「后端处理」段变长。</li>
+      <li><strong>旧机器偏慢（推测）。</strong>轮询给它四分之一的请求，这可能是 p99 多出约 5 ms（60 → 65 ms）的原因之一；题面数据不足以单独证明。</li>
+      <li>轻载下 ρ 只有 200 ÷ 1333 ≈ 0.15，排队倍数约 1.2，几乎没有队可消除，所以只剩开销。</li>
+    </ul>
+  </div>
+
+  <h3 class="sub">(b) 重载为什么从 4.8 s 掉到几百毫秒</h3>
+  <div class="prose">
+    <ul>
+      <li>响应时间 = 建连 + 传输 + 后端处理。重载时「后端处理」里绝大部分是<strong>排队</strong>，每个请求自己的服务时间（轻载时约 18 ms）并没有变。</li>
+      <li>单机到达率 2400 QPS 超过处理能力 1333 QPS，ρ = 1.8，队列无界增长，直到请求超时被丢弃（9% 错误）。4 台把 ρ 压到 0.51，队列很短。</li>
+      <li>用 Little's Law（<span class="num">L = λ × W</span>）看在途请求数：单机约 2400 × 2.1 ≈ 5000 个，几乎全在排队；4 台约 2400 × 0.026 ≈ 60 个，平均每台十几个（L-06 第 17 页同样引用）。</li>
+    </ul>
+  </div>
+  <div class="calc">
+    <span class="calc-h">关于 Little's Law 的口径</span>
+    <p class="cm">Little's Law 中的 W 是平均响应时间。题面只给了分位数，没有给平均值，这里用 p50 做数量级估计；重载下分布右偏，平均值不小于 p50，所以 5000 是偏低的估计。严格计算时不能把 p95、p99 当平均值代入。</p>
+  </div>
+
+  <h3 class="sub">(c) 轮询的 p99 为什么是最少连接的 4 倍</h3>
+  <div class="prose">
+    <ul>
+      <li><strong>轮询</strong>不管机器快慢，每台分 25%（600 QPS）。旧机器上限只有 667 QPS，ρ = 0.90，排队约 10 倍；新机器 ρ = 0.45。四分之一的请求落在排队 10 倍的机器上，所以最慢的 1% 全在它那里，p99 达 1.6 s；p50 因为四分之三的请求在快机器上，几乎不受影响。</li>
+      <li><strong>最少连接</strong>按「手头连接数最少」选择。慢机器的连接消化得慢，累计得多，自然少拿，稳态下各台份额与处理能力成正比，ρ 趋于一致，p99 收回到 400 ms。</li>
+    </ul>
+  </div>
+
+  <h3 class="sub">最后一问：平均还是尾延迟，何时成立</h3>
+  <div class="tablewrap">
+    <table>
+      <caption>三种比较</caption>
+      <thead><tr><th>比较</th><th>平均（以 p50 看）</th><th>尾延迟</th></tr></thead>
+      <tbody>
+        <tr><td>轻载：单机 → 4 台</td><td>略变差（18 → 19 ms）</td><td>略变差（p99 60 → 65 ms）</td></tr>
+        <tr><td>重载：单机 → 4 台</td><td>大幅改善（2.1 s → 26 ms）</td><td>大幅改善（p95 4.8 s → 300 ms）</td></tr>
+        <tr><td>同样 4 台：轮询 → 最少连接</td><td>基本不变（26 → 25 ms）</td><td>改善 4 倍（p99 1.6 s → 400 ms）</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="prose">
+    <p><strong>结论：</strong>负载均衡改善的是<strong>排队</strong>，而排队主要伤害尾部，机器不均衡时更是如此。成立的条件有三：单机确实处在排队区（ρ 接近或超过 0.7，L-07 第 6 页的容量线）；后端同构，或均衡策略能感知差异；均衡器自身和共享依赖（数据库、第一幕的 ×4）没有成为新瓶颈。</p>
+  </div>
+
+  <div class="pit">
+    <span class="pit-h">预期常见误区</span>
+    <ul>
+      <li>把「p95 降了」解释成「每个请求都被加速」，忽略服务时间没有变。</li>
+      <li>用 Little's Law 时把 p95、p99 当平均值代入，或根本没有代入数字。</li>
+      <li>认为最少连接总是优于轮询。请求耗时相近且后端同构时，两者差别很小；优势来自后端能力或请求耗时有差异。</li>
+      <li>忽略轻载那 1～5 ms，或把它说成测量误差。</li>
+    </ul>
+  </div>
+  </div>
+</section>
+
+<!-- ============ 讲评 3 ============ -->
+<section class="act" id="r3">
+  <div class="numeral" aria-hidden="true">3</div>
+  <div class="act-body">
+  <header>
+    <span class="kicker">REVIEW 3</span>
+    <h2>日常：收益不止性能，每一项都有前提</h2>
+    <p class="leads">对应 <b>问题 3 · 不只是性能</b></p>
+  </header>
+
+  <div class="recall"><span class="pill">问题 3</span><span>从可用性、可维护性、安全性、可观测性、成本 / 弹性中至少选三个方面，各给出具体机制，并说明是「顺带」还是「额外建设」。回答「关掉两台」需要哪些前提。</span></div>
+
+  <div class="verdict">
+    <span class="k">一句话结论</span>
+    <p>单一入口让很多事只做一次，但<strong>顺带得到的是入口，不是能力</strong>：健康检查、滚动发布、日志字段、自动伸缩都要额外建设。主任的「关掉两台」可以做，前提是状态不在机器上、冗余没有用尽、开回来足够早，并且有人（或定时任务）负责。</p>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <caption>参考归类 · 至少三项即可</caption>
+      <colgroup><col style="width:17%"><col style="width:31%"><col style="width:52%"></colgroup>
+      <thead><tr><th>方面</th><th>机制</th><th>顺带得到 / 要额外建设</th></tr></thead>
+      <tbody>
+        <tr><td>可用性</td><td>故障节点被摘除，其余继续服务</td><td><strong>顺带：</strong>冗余本身。<br><strong>额外：</strong>健康检查的间隔与阈值、被动容错、连接排空</td></tr>
+        <tr><td>可维护性（发布）</td><td>逐台摘除 → 更新 → 挂回</td><td><strong>顺带：</strong>入口控制。<br><strong>额外：</strong>无状态或 Session 共享、新旧版本兼容、优雅停止、发布脚本</td></tr>
+        <tr><td>安全性</td><td>HTTPS 终结、单 IP 限流只在入口配一次</td><td><strong>顺带：</strong>入口集中，只配一次。<br><strong>额外：</strong>入口到后端的内网链路、证书管理、限流阈值调优</td></tr>
+        <tr><td>可观测性</td><td>访问日志里的 <code>upstream_addr</code>、<code>upstream_response_time</code> 直接定位慢机器</td><td><strong>顺带：</strong>入口日志。<br><strong>额外：</strong>日志格式加字段、请求 ID、集中日志（第一幕现象 3）</td></tr>
+        <tr><td>成本 / 弹性</td><td>平时缩容，选课前扩容</td><td><strong>顺带：</strong>无。<br><strong>额外：</strong>定时或自动伸缩、启动与预热、状态外置</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub">「关掉两台」需要哪些前提</h3>
+  <ol class="steps">
+    <li><strong>状态不在机器上。</strong>Session 已经共享，否则关机就是让一部分学生掉线。</li>
+    <li><strong>冗余没有用尽。</strong>平时几十 QPS，一台就够；剩 2 台时并联可用性仍有 1 − 0.01² = 99.99%，但发布时再摘一台只剩 1 台，冗余和滚动发布能力同时丧失。所以不能关到只剩 1 台。</li>
+    <li><strong>开回来足够早。</strong>JVM 与 Tomcat 启动、本地缓存预热都要时间，冷缓存还会让回源量猛增（第一幕现象 2）。要在开放前提前开，并用健康检查确认后再放量，不能等流量来了才开（启动时间是扩容的硬参数，L-05 第 24 页）。</li>
+    <li><strong>有人负责触发。</strong>定时任务或自动伸缩，而不是靠人记得。</li>
+    <li><strong>先摘除再关。</strong>关之前把机器从 Nginx 摘下并排空在途请求，否则正在处理的请求会失败。</li>
+    <li><strong>省不省钱取决于计费方式。</strong>云上按量计费才明显省钱，自有物理机只能省电。</li>
+  </ol>
+  <div class="prose">
+    <p>这就是模块 6（资源管理：分配、调度、伸缩）要系统回答的问题，届时会回到这里。</p>
+  </div>
+
+  <div class="pit">
+    <span class="pit-h">预期常见误区</span>
+    <ul>
+      <li>只列「能分流」「更快」这类性能收益，没有展开到其他方面。</li>
+      <li>把所有收益都说成「顺带」，没有区分哪些要额外建设。</li>
+      <li>回答「可以关」但不讲前提，或只讲「省电」。</li>
+      <li>因为 CPU 只有 3% 就主张关到只剩 1 台，忽略了冗余和滚动发布。</li>
+    </ul>
+  </div>
+  </div>
+</section>
+
+<!-- ============ 讲评 4 ============ -->
+<section class="act" id="r4">
+  <div class="numeral" aria-hidden="true">4</div>
+  <div class="act-body">
+  <header>
+    <span class="kicker">REVIEW 4</span>
+    <h2>故障：并联让故障变小，共因让故障变大</h2>
+    <p class="leads">对应 <b>问题 4 · 复杂但可靠</b></p>
+  </header>
+
+  <div class="recall"><span class="pill">问题 4</span><span>(a) 串并联可用性怎么算，4 台 99% 并联是多少；(b) 主备为何对 Nginx 可行、对应用服务器却不是首选；(c) 故障次数为何变多而可用性变好；(d) 全站 502 说明了什么新的故障模式。</span></div>
+
+  <div class="verdict">
+    <span class="k">一句话结论</span>
+    <p>机器多了，故障确实更频繁；可靠性变好，是因为<strong>每一次故障不再等于服务不可用</strong>，而且恢复从几十分钟压到几秒。真正的新风险是<strong>共因故障</strong>：同一个健康检查把四台「独立」的机器同时判死。</p>
+  </div>
+
+  <h3 class="sub">(a) 串联与并联</h3>
+  <div class="calc">
+    <span class="calc-h">关键计算 · 可用性</span>
+    <p>串联（任一环节坏则坏）：A = A₁ × A₂ × …</p>
+    <p>并联（全部坏才坏）：A = 1 − (1 − A₁)(1 − A₂)…</p>
+    <p>4 台各 99% 并联：A = 1 − 0.01⁴ = 99.999999%（每年约 0.3 秒）</p>
+    <p class="cm">前提：故障彼此独立，且剩下的机器扛得住。常见错误是把 4 台当串联，算成 0.99⁴ ≈ 96.1%。</p>
+    <p class="cm">整体还要乘上路径上其他环节。题面没给 Nginx 和 MySQL 的数值，下面仅作示意：Nginx 主备各 99% → 99.99%，MySQL 单机 99%，则整体 ≈ 0.9999 × 0.99999999 × 0.99 ≈ 98.99%，约每年 3.7 天，被单点的 MySQL 拉了回去。</p>
+  </div>
+
+  <h3 class="sub">(b) 主备为什么对 Nginx 可行，对应用服务器不是首选</h3>
+  <div class="prose">
+    <ul>
+      <li><strong>状态。</strong>Nginx 只转发，几乎没有业务状态，连接断了客户端重试即可，主备加虚拟 IP 漂移 2 秒就够。应用服务器持有 Session、本地缓存和在途请求，切换要么丢状态，要么要同步状态。</li>
+      <li><strong>容量。</strong>主备的备机平时闲置，不增加吞吐。应用层的瓶颈恰恰是容量（单机扛不住 2400 QPS），需要多台并行；多活加无状态（或状态外置），同时解决容量和可用性。</li>
+      <li><strong>恢复。</strong>多活下一台挂掉只是容量少 25%，没有切换动作；主备要经历检测、切换、预热。</li>
+    </ul>
+  </div>
+
+  <h3 class="sub">(c) 故障次数变多，可用性为何变好</h3>
+  <div class="tablewrap">
+    <table>
+      <caption>按题面数据估算 · 窗口取单机时代 2 年、本学期约 5 个月（图中 9 月至 1 月）</caption>
+      <thead><tr><th></th><th class="n">单机时代</th><th class="n">本学期</th></tr></thead>
+      <tbody>
+        <tr><td>故障事件</td><td class="n">3 次 / 2 年 ≈ 1.5 次 / 年</td><td class="n">5 次 / 5 个月 ≈ 12 次 / 年</td></tr>
+        <tr><td>每次恢复</td><td class="n">人工 20～40 分钟</td><td class="n">自动摘除 3 秒</td></tr>
+        <tr><td>不可用时长</td><td class="n">约 45 分钟 / 年</td><td class="n">约 7.2 分钟 / 年</td></tr>
+        <tr><td>可用性</td><td class="n">≈ 99.991%</td><td class="n">≈ 99.9986%</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="prose">
+    <p>可用性 = MTTF ÷ (MTTF + MTTR)（L-08 第 20 页）。机器数增加，故障次数按台数增加；但并联使单次故障不中断服务，健康检查把 MTTR 从几十分钟压到 3 秒。<strong>靠缩短 MTTR，而不是提高单机 MTTF。</strong>注意：本学期那 3 分钟不是机器故障造成的，五次机器故障贡献了 0 分钟不可用。</p>
+  </div>
+
+  <h3 class="sub">(d) 新的故障模式：共因故障</h3>
+  <div class="prose">
+    <p>并联公式的前提是「故障独立」。健康检查的间隔和阈值被改小，一次网络抖动让 Nginx 把四台同时判为不健康，全站 502：判定者是共享的，<strong>独立故障被变成了同时故障</strong>。同类风险还有：</p>
+    <ul>
+      <li>共享依赖（MySQL、缓存、DNS、配置中心）出问题，所有后端同时受影响。</li>
+      <li>Nginx 主备「脑裂」，虚拟 IP 同时出现在两台上。</li>
+      <li>级联过载：一台掉线，流量转移给其余，其余也撑不住，被连锁摘除（容量没有冗余）。</li>
+      <li>一次变更同时推到所有机器（坏配置、坏版本）。</li>
+      <li>健康检查过敏（抖动）或过钝（坏机器继续接流量）。</li>
+    </ul>
+    <p>对策：摘除比例设上限、「全挂保护」（至少保留若干台）；健康检查的参数也要评审；配置同样走灰度与可回滚（L-05）；容量按 N+1 或 N+2 预留；监控告警。</p>
+  </div>
+
+  <figure>
+    <div class="fig">
+      <svg viewBox="0 0 760 250" role="img" aria-label="每年累计不可用时间的对数坐标条形图。单台 99% 约 3.65 天；4 台中至少 3 台存活约 5.2 小时；4 台中至少 1 台存活约 0.3 秒；在 4 台之外再串联一个单点 MySQL 99%，整体又回到约 3.7 天。">
+        <text x="20" y="18" class="lbl-m lbl-mono">每年累计不可用时间（对数刻度，越短越好）· 假设每台 99%、故障独立</text>
+        <line x1="270" y1="34" x2="270" y2="206" class="grid"/>
+        <line x1="376.7" y1="34" x2="376.7" y2="206" class="grid"/>
+        <line x1="483.4" y1="34" x2="483.4" y2="206" class="grid"/>
+        <line x1="566.2" y1="34" x2="566.2" y2="206" class="grid"/>
+        <line x1="626.2" y1="34" x2="626.2" y2="206" class="grid"/>
+        <line x1="210" y1="206" x2="640" y2="206" class="axis"/>
+        <line x1="210" y1="34" x2="210" y2="206" class="axis"/>
+        <text x="270" y="222" text-anchor="middle" class="lbl-m lbl-mono">1 秒</text>
+        <text x="376.7" y="222" text-anchor="middle" class="lbl-m lbl-mono">1 分钟</text>
+        <text x="483.4" y="222" text-anchor="middle" class="lbl-m lbl-mono">1 小时</text>
+        <text x="566.2" y="222" text-anchor="middle" class="lbl-m lbl-mono">1 天</text>
+        <text x="626.2" y="222" text-anchor="middle" class="lbl-m lbl-mono">10 天</text>
+
+        <text x="200" y="64" text-anchor="end" class="lbl-s">单台 99%</text>
+        <rect x="210" y="52" width="389.9" height="18" class="bar-mut"/>
+        <text x="606" y="65" class="lbl-s lbl-mono">3.65 天</text>
+
+        <text x="200" y="104" text-anchor="end" class="lbl-s">4 台，至少 3 台存活</text>
+        <rect x="210" y="92" width="316.3" height="18" class="bar-amber"/>
+        <text x="532" y="105" class="lbl-amber lbl-mono">5.2 小时</text>
+
+        <text x="200" y="144" text-anchor="end" class="lbl-s">4 台，至少 1 台存活</text>
+        <rect x="210" y="132" width="29.9" height="18" class="bar-acc"/>
+        <text x="246" y="145" class="lbl-acc lbl-mono">0.3 秒</text>
+
+        <text x="200" y="176" text-anchor="end" class="lbl-s">再串联单点 MySQL 99%</text>
+        <text x="200" y="190" text-anchor="end" class="lbl-m">（上一行 + 一个单点）</text>
+        <rect x="210" y="170" width="390.2" height="18" class="bar-red"/>
+        <text x="606" y="183" class="lbl-red lbl-mono">3.7 天</text>
+      </svg>
+    </div>
+    <figcaption><b>并联把一台的 3.65 天压到 0.3 秒，但路径上只要还有一个单点，整体又被拉回几天。</b>「至少 3 台存活」对应进阶题：要扛住峰值时，4 台只有 99.94%（约 5.2 小时 / 年）。</figcaption>
+  </figure>
+
+  <h3 class="sub">进阶（不计分）：要扛住峰值，至少 3 台存活</h3>
+  <div class="tablewrap">
+    <table>
+      <caption>每台 99%，高峰至少需要 3 台，故障独立</caption>
+      <thead><tr><th>配置</th><th class="n">可用性</th><th class="n">每年不可用</th></tr></thead>
+      <tbody>
+        <tr><td>4 台，需 3 台（N+1）</td><td class="n">99.94%</td><td class="n">约 5.2 小时</td></tr>
+        <tr><td>5 台，需 3 台（N+2）</td><td class="n">99.999%</td><td class="n">约 5 分钟</td></tr>
+        <tr><td>6 台，需 3 台（N+3）</td><td class="n">99.99999%</td><td class="n">约 5 秒</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="prose">
+    <p>可用性要按「满足峰值所需的最少台数」算，不是「至少 1 台」。高峰要 3 台，配 4 台只有 99.94%，配 5 台就到 99.999%。还要把滚动发布时摘掉的一台也算进去：发布期间冗余少了一个。以上都假设故障独立，共因故障会让实际值更差。</p>
+  </div>
+
+  <div class="pit">
+    <span class="pit-h">预期常见误区</span>
+    <ul>
+      <li>并联用乘法（0.99⁴ ≈ 96%），或把串联与并联混用。</li>
+      <li>只算后端的并联，忽略 Nginx、MySQL 也在串联路径上。</li>
+      <li>说「主备不可行」，而不是「首选不同」：状态与容量决定了首选。</li>
+      <li>把故障次数增加等同于可靠性下降，没有区分「故障次数」与「不可用时长」。</li>
+      <li>只回答「Nginx 也要主备」，没有指出健康检查配置本身就是共因故障。</li>
+    </ul>
+  </div>
+  </div>
+</section>
+
+<!-- ============ 讲评 5 ============ -->
+<section class="act" id="r5">
+  <div class="numeral" aria-hidden="true">5</div>
+  <div class="act-body">
+  <header>
+    <span class="kicker">REVIEW 5</span>
+    <h2>上限：均衡了请求，没有均衡数据</h2>
+    <p class="leads">对应 <b>问题 5 · 有没有上限</b></p>
+  </header>
+
+  <div class="recall"><span class="pill">问题 5</span><span>分三层：(a) 均衡器自身的上限，以及再往上怎么扩；(b) 用 Amdahl 定律估算串行比例 s 和理论上限，并说明 s 来自哪里；(c) 请求级均衡对数据级热点能做什么、不能做什么，解法放在哪一层。</span></div>
+
+  <div class="verdict">
+    <span class="k">一句话结论</span>
+    <p>负载均衡有三层上限：<strong>入口自身</strong>（约 2.5 万 QPS）、<strong>串行比例</strong>（s ≈ 0.25，提交 TPS 封顶 1200）、<strong>数据热点</strong>（2000 个提交抢同一行）。三层的解法分别在入口层、数据层和业务层，而不是「再加几台应用服务器」。</p>
+  </div>
+
+  <h3 class="sub">(a) 均衡器自身的上限</h3>
+  <div class="prose">
+    <ul>
+      <li><strong>数量级。</strong>L-04 第 18 页：七层反向代理单机约数万～十万级 QPS，开了 HTTPS 终结还要更低；题面实测约 2.5 万 QPS 时 CPU 打满。抢课时读流量预计 3 万 QPS，超出 20%。</li>
+      <li><strong>留余量。</strong>按 L-07 的 0.7 容量线，一台只放 1.75 万 QPS，3 万 QPS 需要 2 台，再加 1 台冗余共 3 台。</li>
+      <li><strong>怎么扩（L-04 第六、七阶段）。</strong>第六阶段：在 Nginx 前再加一层性能更强的四层负载均衡（如 LVS、硬件设备，数十万～百万级），主备加虚拟 IP，后面挂多台 Nginx；新问题是四层与七层的取舍，以及仍是单机房。第七阶段：DNS 轮询等方式跨机房，两个虚拟 IP 分属两个机房；新问题是跨机房数据同步，以及缓存让切换变慢。</li>
+      <li><strong>从源头减少请求。</strong>3 万 QPS 的读大多是反复读同一份余量。可以降低刷新频率、合并请求、给余量设秒级缓存或用 CDN，让流量到不了 Nginx。</li>
+    </ul>
+  </div>
+
+  <h3 class="sub">(b) 串行比例 s 与理论上限</h3>
+  <div class="calc">
+    <span class="calc-h">关键计算 · Amdahl</span>
+    <p>加速比 S(N) = TPS(N) ÷ TPS(1)，S(N) = 1 ÷ (s + (1 − s) ÷ N)</p>
+    <p>反解：s = (1 ÷ S − 1 ÷ N) ÷ (1 − 1 ÷ N)</p>
+    <p>N = 4 ：S = 690 ÷ 300 = 2.30 → s = 0.246</p>
+    <p>N = 8 ：S = 870 ÷ 300 = 2.90 → s = 0.251</p>
+    <p>N = 16：S = 1010 ÷ 300 = 3.37 → s = 0.250</p>
+    <p>取 s ≈ 0.25 → 理论上限 S∞ = 1 ÷ s = 4 倍，即 300 ÷ 0.25 = 1200 TPS</p>
+    <p class="cm">三个点算出的 s 几乎一样（0.246～0.251），说明 Amdahl 模型对这组数据拟合得很好。预测：32 台约 1097，64 台约 1146；16 台已达上限的 84%。</p>
+  </div>
+
+  <figure>
+    <div class="fig">
+      <svg viewBox="0 0 560 300" role="img" aria-label="提交 TPS 随应用服务器数量的变化。实测点：1 台 300，4 台 690，8 台 870，16 台 1010。蓝色曲线是 s 等于 0.25 的 Amdahl 拟合，逼近 1200 TPS 的红色虚线上限；点线是 s 等于 0 的理想线性扩展。">
+        <line x1="70" y1="240" x2="520" y2="240" class="axis"/>
+        <line x1="70" y1="30" x2="70" y2="240" class="axis"/>
+        <line x1="70" y1="195" x2="520" y2="195" class="grid"/>
+        <line x1="70" y1="150" x2="520" y2="150" class="grid"/>
+        <line x1="70" y1="105" x2="520" y2="105" class="grid"/>
+        <line x1="70" y1="60" x2="520" y2="60" class="grid"/>
+        <text x="62" y="244" text-anchor="end" class="lbl-m lbl-mono">0</text>
+        <text x="62" y="199" text-anchor="end" class="lbl-m lbl-mono">300</text>
+        <text x="62" y="154" text-anchor="end" class="lbl-m lbl-mono">600</text>
+        <text x="62" y="109" text-anchor="end" class="lbl-m lbl-mono">900</text>
+        <text x="62" y="64" text-anchor="end" class="lbl-m lbl-mono">1200</text>
+        <text x="30" y="26" class="lbl-m">TPS</text>
+        <text x="84.1" y="260" text-anchor="middle" class="lbl-m lbl-mono">1</text>
+        <text x="126.2" y="260" text-anchor="middle" class="lbl-m lbl-mono">4</text>
+        <text x="182.5" y="260" text-anchor="middle" class="lbl-m lbl-mono">8</text>
+        <text x="295" y="260" text-anchor="middle" class="lbl-m lbl-mono">16</text>
+        <text x="520" y="260" text-anchor="middle" class="lbl-m lbl-mono">32</text>
+        <text x="295" y="282" text-anchor="middle" class="lbl-m">应用服务器数 N</text>
+        <line x1="84.1" y1="195" x2="126.2" y2="60" class="ln-thin dots"/>
+        <text x="132" y="52" class="lbl-m">线性扩展（s = 0）</text>
+        <line x1="70" y1="60" x2="520" y2="60" class="ln-red dash"/>
+        <text x="514" y="54" text-anchor="end" class="lbl-red">上限 1200 TPS = 300 ÷ 0.25</text>
+        <polyline points="84.1,195 91.1,180 98.1,168 112.2,150 126.2,137.1 154.4,120 182.5,109.1 238.8,96 295,88.4 407.5,80 520,75.4" class="ln-acc"/>
+        <circle cx="84.1" cy="195" r="5" class="pt"/>
+        <text x="94" y="200" class="lbl-acc lbl-mono">300</text>
+        <circle cx="126.2" cy="136.5" r="5" class="pt"/>
+        <text x="136" y="143" class="lbl-acc lbl-mono">690</text>
+        <text x="136" y="156" class="lbl-m lbl-mono">s = 0.246</text>
+        <circle cx="182.5" cy="109.5" r="5" class="pt"/>
+        <text x="192" y="124" class="lbl-acc lbl-mono">870</text>
+        <text x="192" y="137" class="lbl-m lbl-mono">s = 0.251</text>
+        <circle cx="295" cy="88.5" r="5" class="pt"/>
+        <text x="300" y="108" class="lbl-acc lbl-mono">1010</text>
+        <text x="300" y="121" class="lbl-m lbl-mono">s = 0.250 · 已达上限 84%</text>
+        <circle cx="520" cy="75.4" r="4.5" class="pt-2"/>
+        <text x="512" y="94" text-anchor="end" class="lbl-m">32 台 ≈ 1097（预测）</text>
+      </svg>
+    </div>
+    <figcaption><b>实测点（实心）几乎落在 s = 0.25 的拟合曲线上。</b>曲线渐近于 1200 TPS 的红线，16 台已经走完 84%，再翻一倍只多约 90 TPS。点线是 s = 0 的理想线性扩展，现实里不存在。</figcaption>
+  </figure>
+
+  <div class="prose">
+    <p><strong>s 来自哪里。</strong>来自被所有服务器共享的那一行数据，而不是应用服务器本身。热门课的余量行要在事务里更新，事务提交前行锁不释放，同一行上的提交只能一个接一个：串行部分就是持锁时间。按 s = 0.25 反推：单机 300 TPS 即每笔约 3.33 ms，其中约 0.83 ms 是串行的，1 ÷ 0.83 ms ≈ 1200 TPS（这是按模型推出的量级，不是对持锁时间的实测）。题面也给出佐证：16 台时行锁等待占提交耗时的 70%。数据库 CPU 95% 说明整库资源也接近饱和，但行锁是更根本的限制：换更强的数据库只能缩短持锁时间，不能消除串行。</p>
+  </div>
+
+  <h3 class="sub">(c) 「均衡」本身的上限</h3>
+  <div class="prose">
+    <p>负载均衡把<strong>请求</strong>均匀分到 16 台，但<strong>数据</strong>没有被分开：2000 个提交无论落到哪台 Tomcat，最后都要拿同一行的锁。它能分摊连接、CPU 和应用层排队，让应用层不再是瓶颈；不能改变数据的访问模式。解法在数据层和业务层：</p>
+  </div>
+
+  <figure>
+    <div class="fig">
+      <svg viewBox="0 0 760 320" role="img" aria-label="左图是现在：两千个提交经 Nginx 分到十六台 Tomcat，全部落到数据库中同一门课的余量行上排队，吞吐不超过 1200 TPS。右图是改后：提交先到 Redis 做原子扣减，约 60 个成功的异步落库，其余约 1940 个直接返回已满，不进数据库。">
+        <defs>
+          <marker id="rv5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="mk-ink"/></marker>
+          <marker id="rv5r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="mk-red"/></marker>
+        </defs>
+        <text x="14" y="16" class="lbl-m lbl-mono">现在 · 全部落到同一行</text>
+        <text x="404" y="16" class="lbl-m lbl-mono">改后 · 先在内存里扣</text>
+        <line x1="380" y1="8" x2="380" y2="312" class="grid"/>
+
+        <use href="#i-crowd" x="14" y="26" width="56" height="40" class="u-muted"/>
+        <text x="14" y="82" class="lbl-s">2000 人抢 60 个名额</text>
+        <line x1="74" y1="46" x2="104" y2="46" class="ln" marker-end="url(#rv5)"/>
+        <use href="#i-lb" x="108" y="24" width="60" height="40" class="u-acc"/>
+        <text x="138" y="80" text-anchor="middle" class="lbl-s">Nginx</text>
+        <line x1="172" y1="46" x2="204" y2="46" class="ln" marker-end="url(#rv5)"/>
+        <use href="#i-server" x="208" y="22" width="34" height="46" class="u-acc"/>
+        <text x="225" y="84" text-anchor="middle" class="lbl-s">Tomcat ×16</text>
+        <line x1="212" y1="92" x2="150" y2="176" class="ln-red" marker-end="url(#rv5r)"/>
+        <line x1="225" y1="92" x2="200" y2="176" class="ln-red" marker-end="url(#rv5r)"/>
+        <line x1="238" y1="92" x2="250" y2="176" class="ln-red" marker-end="url(#rv5r)"/>
+        <use href="#i-db" x="20" y="168" width="56" height="56" class="u-ink"/>
+        <text x="48" y="240" text-anchor="middle" class="lbl-s">MySQL</text>
+        <rect x="96" y="180" width="250" height="30" rx="3" class="box-bad"/>
+        <use href="#i-lock" x="104" y="184" width="16" height="22" class="u-red"/>
+        <text x="126" y="200" class="lbl-red lbl-mono">CS101 · 余量 60 · 行锁</text>
+        <text x="96" y="232" class="lbl-red">全部提交在这一行排队</text>
+        <text x="96" y="248" class="lbl-m">吞吐 ≤ 1200 TPS（s ≈ 0.25）</text>
+
+        <use href="#i-crowd" x="404" y="26" width="56" height="40" class="u-muted"/>
+        <text x="404" y="82" class="lbl-s">2000 人抢 60 个名额</text>
+        <line x1="464" y1="46" x2="494" y2="46" class="ln" marker-end="url(#rv5)"/>
+        <use href="#i-lb" x="498" y="24" width="60" height="40" class="u-acc"/>
+        <text x="528" y="80" text-anchor="middle" class="lbl-s">Nginx</text>
+        <line x1="562" y1="46" x2="594" y2="46" class="ln" marker-end="url(#rv5)"/>
+        <use href="#i-server" x="598" y="22" width="34" height="46" class="u-acc"/>
+        <text x="615" y="84" text-anchor="middle" class="lbl-s">Tomcat ×16</text>
+        <line x1="615" y1="92" x2="615" y2="118" class="ln" marker-end="url(#rv5)"/>
+        <rect x="460" y="120" width="240" height="46" rx="3" class="box"/>
+        <text x="580" y="140" text-anchor="middle" class="lbl lbl-b">Redis · 原子扣减</text>
+        <text x="580" y="157" text-anchor="middle" class="lbl-m">余量 60 → 0（内存中，不走行锁）</text>
+        <line x1="520" y1="166" x2="520" y2="198" class="ln" marker-end="url(#rv5)"/>
+        <rect x="400" y="200" width="200" height="30" rx="15" class="chip"/>
+        <text x="500" y="219" text-anchor="middle" class="lbl-s">其余约 1940 个：直接返回「已满」</text>
+        <line x1="650" y1="166" x2="650" y2="198" class="ln" marker-end="url(#rv5)"/>
+        <rect x="598" y="200" width="160" height="30" rx="15" class="chip"/>
+        <text x="678" y="219" text-anchor="middle" class="lbl-s">约 60 个成功 · 异步落库</text>
+        <line x1="678" y1="230" x2="678" y2="250" class="ln" marker-end="url(#rv5)"/>
+        <use href="#i-db" x="656" y="252" width="44" height="44" class="u-ink"/>
+        <text x="678" y="310" text-anchor="middle" class="lbl-s">MySQL · 约 60 次写</text>
+      </svg>
+    </div>
+    <figcaption><b>把热点从行锁挪到内存，把注定失败的请求挡在数据库之外。</b>2000 抢 60，约 97% 的请求注定失败，不该每一个都去抢行锁。</figcaption>
+  </figure>
+
+  <ol class="steps">
+    <li><strong>热点移出数据库。</strong>余量放 Redis，用原子扣减（<code>DECR</code> 或脚本）；扣减成功后再通过消息队列或 Outbox 异步落库（L-03）。2000 次行锁争用变成约 60 次落库。L-06、L-07 讲义同样落在这一点。</li>
+    <li><strong>快速失败。</strong>余量归零后，其余请求在缓存层直接返回「已满」，不进数据库。</li>
+    <li><strong>排队削峰与限流。</strong>请求先入队，按序处理，限制进入数据库的并发。</li>
+    <li><strong>业务层错峰。</strong>分年级、分时段开放，或预约、抽签，直接改变需求的形状。</li>
+    <li><strong>分库分表帮不上。</strong>它只能分散「不同课程」的行，对「同一门课」的热点无效。</li>
+  </ol>
+  <div class="prose">
+    <p>这些解法有新问题：Redis 与数据库的一致性（扣了没落库，落库失败要回补）、超卖保护、重复提交的幂等。这与第一幕「瓶颈 → 方案 → 新问题」的读法一致。</p>
+  </div>
+
+  <div class="pit">
+    <span class="pit-h">预期常见误区</span>
+    <ul>
+      <li>看到数据库 CPU 95% 就主张「换更大的数据库」或「加从库」。读写分离对写没有帮助，更强的 CPU 只缩短持锁时间，串行依然存在。</li>
+      <li>算 s 时写成 s = 1 ÷ S（忽略 (1 − s) ÷ N 一项）：N = 16 时得到 0.30，偏大。</li>
+      <li>只估出 s，没有给出理论上限，或把上限说成「数据库 CPU 的极限」。</li>
+      <li>(a) 只说「Nginx 到顶了就多加几台」，没有说明前面还需要再加一层来分发，也没有数量级依据。</li>
+      <li>以为分库分表能解决「2000 个人抢同一门课」。</li>
+    </ul>
+  </div>
+  </div>
+</section>
+
+<!-- ============ 评分对照 ============ -->
+<section class="block" id="rubric">
+  <div class="h-row"><span class="kicker">RUBRIC</span><h2>评分对照</h2><span class="kicker">满分 10 分 · 每题 2 分</span></div>
+  <div class="prose">
+    <p>评分标准见题面：2 分 = 判断准确，用了数据或做了计算，指出成立条件或边界；1 分 = 方向正确但停留在概念复述，没有数据或只讲一面；0 分 = 未作答、明显错误或无关。下表给出每题「满分的关键」和「容易只得 1 分的情形」，供阅卷参考，实际以小组答卷为准。第 2 题的容量口径题面没有明说（见第二幕的口径假设），阅卷时看机制是否讲对、假设是否自洽，不要求算出同样的 ρ。</p>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <caption>各题要点对照</caption>
+      <thead><tr><th>题</th><th>满分的关键</th><th>容易只得 1 分</th><th>硬性条件</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>收益逐条对应需求类别并有度量；三件事成因准确、各有解法；用「瓶颈 → 方案 → 新问题」表述</td><td>只写「性能更好」；成因只说「因为有多台机器」</td><td>—</td></tr>
+        <tr><td>2</td><td>(a)(b)(c) 都解释，用到排队、Little's Law、响应时间分解；回答平均与尾延迟并给出成立条件</td><td>只解释重载变快；p99 差异只说「轮询不好」</td><td>须解释 (a)、(b)、(c)</td></tr>
+        <tr><td>3</td><td>至少三个方面各有机制，区分顺带与额外建设；「关两台」的前提不少于三条</td><td>只讲收益、不区分；「关两台」只说省钱</td><td>—</td></tr>
+        <tr><td>4</td><td>串并联公式与 4 台 99% 的计算；主备与多台的差别（状态、容量）；次数与可用性的关系；共因故障</td><td>公式对但没有算；没有指出新的故障模式</td><td>须给出并联可用性的计算</td></tr>
+        <tr><td>5</td><td>(a) 数量级与扩展路径；(b) s ≈ 0.25、上限 1200 TPS、s 的来源；(c) 解法放在数据层 / 业务层</td><td>只估 s 不给上限；解法放在负载均衡层</td><td>须估 s 并给出理论上限</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 方法提醒 ============ -->
+<section class="block" id="habits">
+  <div class="h-row"><span class="kicker">HABITS</span><h2>方法提醒：四个习惯</h2></div>
+  <ol class="steps">
+    <li><strong>每个判断带一个数。</strong>「更快」「更稳」没有度量就不是判断；题面里的数据就是用来算的。</li>
+    <li><strong>平均值与分位数分开。</strong>Little's Law 用平均值；p95、p99 不能当平均值代入，也不能把各台的分位数直接平均。</li>
+    <li><strong>写出成立条件。</strong>「在……情况下成立，在……情况下不成立」：并联要故障独立，最少连接要后端有差异，超卖要峰值不同时到。</li>
+    <li><strong>先找瓶颈，再选方案，再问新问题。</strong>加机器之前，先问这个瓶颈在哪一层；方案落地之后，立即追问它带来了什么。</li>
+  </ol>
+</section>
+
+<!-- ============ 后续衔接 ============ -->
+<section class="block" id="next">
+  <div class="h-row"><span class="kicker">NEXT</span><h2>这五题在后面的课里怎么用</h2></div>
+  <div class="tablewrap">
+    <table>
+      <caption>回扣关系</caption>
+      <thead><tr><th>本题</th><th>后续用到的地方</th></tr></thead>
+      <tbody>
+        <tr><td>第二幕 · 排队</td><td>L-06 的在途请求与排队；L-07 第 6 页的容量线（利用率 × 0.7）</td></tr>
+        <tr><td>第三幕 · 关掉两台</td><td>模块 6 的伸缩：启动时间、预热、状态外置、冗余</td></tr>
+        <tr><td>第四幕 · 可用性</td><td>L-08 第 20 页：几个 9、MTTF 与 MTTR；健康检查与就绪检查（L-05）</td></tr>
+        <tr><td>第五幕 · 行锁与 Redis</td><td>L-06「线程池是症状，行锁是原因」；L-07 写路径的 fsync；模块 6 中伸缩要对准真正的瓶颈</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 参考 ============ -->
+<section class="block" id="refs">
+  <div class="h-row"><span class="kicker">READING</span><h2>参考阅读</h2></div>
+  <ul class="refs">
+    <li>讲义：L-03（响应时间分解；Amdahl 定律）、L-04（第三、六、七阶段；数量级直觉）、L-05（实例短命与无状态；启动时间）、L-06（在途请求与排队）、L-07（容量线）、L-08（可用性与 MTTR）</li>
+    <li>J. D. C. Little, "A Proof for the Queuing Formula: L = λW", <em>Operations Research</em>, 1961</li>
+    <li>Google SRE Book, Ch. 19 <a href="https://sre.google/sre-book/load-balancing-frontend/">Load Balancing at the Frontend</a>, Ch. 20 <a href="https://sre.google/sre-book/load-balancing-datacenter/">Load Balancing in the Datacenter</a></li>
+    <li>J. Dean, L. A. Barroso, "The Tail at Scale", <em>Communications of the ACM</em>, 2013</li>
+    <li>nginx 文档 <a href="https://nginx.org/en/docs/http/load_balancing.html">Using nginx as HTTP load balancer</a></li>
+  </ul>
+</section>
+
+<footer>
+  <span>互联网产品开发与运维 · 2026 秋</span>
+  <span>思考题 1 · 讲评</span>
+</footer>
+
+</div>
+</body>
+</html>
